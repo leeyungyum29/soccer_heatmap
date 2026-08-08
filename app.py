@@ -238,7 +238,8 @@ def render_heatmap(period_filter=None):
         if len(tdf) > 2:
             sns.kdeplot(x=px, y=py, cmap=team_colors[t_name], fill=True, thresh=0.03, levels=30, alpha=0.75, ax=ax)
 
-        ax.set_title(f"[{t_name}] 히트맵 (이벤트: {len(tdf)}개)", fontsize=14, color='white', pad=12, fontweight='bold')
+        # 팀명 히트맵 단독 출력 (이벤트 개수 제거)
+        ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
     fig.patch.set_facecolor('#1e1e1e')
     st.pyplot(fig)
