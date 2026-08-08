@@ -88,7 +88,7 @@ def draw_pitch(ax, pitch_x=95.0, pitch_y=57.0, pitch_color='#7ec850', line_color
     ax.set_aspect('equal')
     ax.axis('off')
 
-# 다중 파일 로드 및 통합 도우미 함수
+# 다중 파일 로드 함수
 def load_multiple_files(files):
     if not files:
         return None
@@ -99,15 +99,43 @@ def load_multiple_files(files):
         else:
             temp_df = pd.read_csv(file)
         
-        # 파일명에 '전반' / '후반' 문구가 있으면 경기시점 컬럼 자동 부여
         if '경기시점' not in temp_df.columns:
             if '전반' in file.name:
-                temp_df['경기시점'] = '전반전'
+                temp_df['경기시점'] = '전반'
             elif '후반' in file.name:
-                temp_df['경기시점'] = '후반전'
+                temp_df['경기시점'] = '후반'
         df_list.append(temp_df)
     
     return pd.concat(df_list, ignore_index=True) if df_list else None
+
+# '공격 루트 시작' ~ '공격 루트 종료' 구간(시퀀스) 데이터만 추출
+def extract_route_sequence(df):
+    col_opts = df.columns.tolist()
+    col_event = next((c for c in ['이벤트', 'event', 'Event'] if c in col_opts), None)
+    
+    if col_event is None:
+        return df
+
+    in_sequence = False
+    valid_indices = []
+    
+    for idx, row in df.iterrows():
+        event_val = str(row[col_event]).strip()
+        
+        # '공격'과 '시작' 단어가 포함된 지점부터 추적 시작
+        if '공격' in event_val and '시작' in event_val:
+            in_sequence = True
+            valid_indices.append(idx)
+        # '공격'과 '종료'(또는 '끝') 단어가 포함된 지점에서 구간 마감
+        elif '공격' in event_val and ('종료' in event_val or '끝' in event_val):
+            if in_sequence:
+                valid_indices.append(idx)
+            in_sequence = False
+        else:
+            if in_sequence:
+                valid_indices.append(idx)
+                
+    return df.loc[valid_indices].copy()
 
 # =========================================================
 # 3. Streamlit UI 및 데이터 처리
@@ -138,8 +166,10 @@ df_away = load_multiple_files(away_files)
 if df_home is None and df_away is None:
     np.random.seed(42)
     n = 200
-    df_home = pd.DataFrame({'X좌표': np.random.beta(3, 2, n)*95, 'Y좌표': np.random.normal(28.5, 10, n).clip(0,57), '경기시점': ['전반전']*100 + ['후반전']*100})
-    df_away = pd.DataFrame({'X좌표': np.random.beta(2, 3, n)*95, 'Y좌표': np.random.normal(20, 8, n).clip(0,57), '경기시점': ['전반전']*100 + ['후반전']*100})
+    events_sample = ['기타'] * 10 + ['공격 루트 시작', '패스', '크로스', '공격 루트 종료'] * 40
+    events_sample = events_sample[:200]
+    df_home = pd.DataFrame({'X좌표': np.random.beta(3, 2, n)*95, 'Y좌표': np.random.normal(28.5, 10, n).clip(0,57), '경기시점': ['전반']*100 + ['후반']*100, '이벤트': events_sample})
+    df_away = pd.DataFrame({'X좌표': np.random.beta(2, 3, n)*95, 'Y좌표': np.random.normal(20, 8, n).clip(0,57), '경기시점': ['전반']*100 + ['후반']*100, '이벤트': events_sample})
 
 dfs = {}
 if df_home is not None:
@@ -176,12 +206,12 @@ for i, (t_name, _) in enumerate(dfs.items()):
 pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#7EC850")
 
 # =========================================================
-# 4. 히트맵 시각화 (탭 분리: 통합 / 전반전 / 후반전)
+# 4. 히트맵 시각화 (통합 / 전반 / 후반 / 공격 루트 시퀀스)
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
-tab_all, tab_first, tab_second = st.tabs(["🔥 통합 히트맵", "⏱️ 전반전만 보기", "⏱️ 후반전만 보기"])
+tab_all, tab_first, tab_second, tab_route = st.tabs(["🔥 통합 히트맵", "⏱️ 전반전만 보기", "⏱️ 후반전만 보기", "🧭 공격 루트 시퀀스 (시작~종료)"])
 
-def render_heatmap(period_filter=None):
+def render_heatmap(period_filter=None, route_only=False):
     num_teams = len(dfs)
     if num_teams == 0:
         return
@@ -194,25 +224,30 @@ def render_heatmap(period_filter=None):
         ax = axes[i]
         tdf = team_df.copy()
         
+        # 공격 루트 전용 탭 선택 시 '시작 ~ 종료' 시퀀스 구간만 추출
+        if route_only:
+            tdf = extract_route_sequence(tdf)
+
         col_opts = tdf.columns.tolist()
         col_x = next((c for c in ['X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
         col_y = next((c for c in ['Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
         col_period = next((c for c in ['경기시점', 'period', 'Period'] if c in col_opts), None)
 
-        # 기간 필터링 적용
+        # 전반/후반 기간 필터링
         if period_filter and col_period is not None:
             tdf = tdf[tdf[col_period].astype(str).str.contains(period_filter, case=False, na=False)]
 
         if len(tdf) == 0:
             ax.set_facecolor(pitch_bg)
-            ax.text(pitch_x_val/2, pitch_y_val/2, f"{period_filter} 태깅 데이터를 업로드해 주세요", 
+            msg = f"공격 루트 (시작~종료) 구간" if route_only else f"{period_filter}"
+            ax.text(pitch_x_val/2, pitch_y_val/2, f"{msg} 데이터가 존재하지 않습니다", 
                     ha='center', va='center', color='white', fontsize=12, fontweight='bold')
             ax.set_xlim(-5, pitch_x_val + 5)
             ax.set_ylim(-7, pitch_y_val + 5)
             ax.axis('off')
             continue
 
-        # 후반전 진영 180도 자동 반전 (통합/후반 탭 시 적용)
+        # 후반전 진영 180도 자동 반전 (X축, Y축 동시)
         if flip_second_half and col_period is not None:
             second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
             tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
@@ -228,7 +263,6 @@ def render_heatmap(period_filter=None):
             px = tdf[col_x]
             py = tdf[col_y]
 
-        # 공격 방향 지정 (후반전만 볼 때는 공격 방향 반전 표시)
         current_attack_dir = team_attack_dirs[t_name]
         if period_filter == "후반" and not flip_second_half:
             current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
@@ -238,17 +272,19 @@ def render_heatmap(period_filter=None):
         if len(tdf) > 2:
             sns.kdeplot(x=px, y=py, cmap=team_colors[t_name], fill=True, thresh=0.03, levels=30, alpha=0.75, ax=ax)
 
-        # 팀명 히트맵 단독 출력 (이벤트 개수 제거)
         ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
     fig.patch.set_facecolor('#1e1e1e')
     st.pyplot(fig)
 
 with tab_all:
-    render_heatmap(period_filter=None)
+    render_heatmap(period_filter=None, route_only=False)
 
 with tab_first:
-    render_heatmap(period_filter="전반")
+    render_heatmap(period_filter="전반", route_only=False)
 
 with tab_second:
-    render_heatmap(period_filter="후반")
+    render_heatmap(period_filter="후반", route_only=False)
+
+with tab_route:
+    render_heatmap(period_filter=None, route_only=True)
