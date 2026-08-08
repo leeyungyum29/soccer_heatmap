@@ -162,15 +162,6 @@ auto_scale = st.sidebar.checkbox("태깅 좌표 자동 정규화 (Scaling)", val
 df_home = load_multiple_files(home_files)
 df_away = load_multiple_files(away_files)
 
-# 샘플 데이터 생성
-if df_home is None and df_away is None:
-    np.random.seed(42)
-    n = 200
-    events_sample = ['기타'] * 10 + ['공격 루트 시작', '패스', '크로스', '공격 루트 종료'] * 40
-    events_sample = events_sample[:200]
-    df_home = pd.DataFrame({'X좌표': np.random.beta(3, 2, n)*95, 'Y좌표': np.random.normal(28.5, 10, n).clip(0,57), '경기시점': ['전반']*100 + ['후반']*100, '이벤트': events_sample})
-    df_away = pd.DataFrame({'X좌표': np.random.beta(2, 3, n)*95, 'Y좌표': np.random.normal(20, 8, n).clip(0,57), '경기시점': ['전반']*100 + ['후반']*100, '이벤트': events_sample})
-
 dfs = {}
 if df_home is not None:
     dfs[home_name_input] = df_home
@@ -190,7 +181,10 @@ st.sidebar.subheader("🎨 팀별 히트맵 색상 및 방향")
 team_colors = {}
 team_attack_dirs = {}
 
-for i, (t_name, _) in enumerate(dfs.items()):
+# 파일이 업로드된 팀이 있을 경우 설정 옵션 생성, 없으면 기본값 세팅
+target_teams = list(dfs.keys()) if len(dfs) > 0 else [home_name_input, away_name_input]
+
+for i, t_name in enumerate(target_teams):
     default_idx = 0 if i == 0 else 2
     selected_p = st.sidebar.selectbox(f"[{t_name}] 색상 테마", options=list(COLOR_PALETTES.keys()), index=default_idx, key=f"color_{i}")
     team_colors[t_name] = COLOR_PALETTES[selected_p]
@@ -209,82 +203,87 @@ pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#7EC850")
 # 4. 히트맵 시각화 (통합 / 전반 / 후반 / 공격 루트 시퀀스)
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
-tab_all, tab_first, tab_second, tab_route = st.tabs(["🔥 통합 히트맵", "⏱️ 전반전만 보기", "⏱️ 후반전만 보기", "🧭 공격 루트 시퀀스 (시작~종료)"])
 
-def render_heatmap(period_filter=None, route_only=False):
-    num_teams = len(dfs)
-    if num_teams == 0:
-        return
+# 파일이 아무것도 업로드되지 않았을 때 안내 메시지 출력
+if len(dfs) == 0:
+    st.warning("⚠️ 왼쪽 사이드바에서 홈팀 또는 어웨이팀의 태깅 데이터(CSV/XLSX) 파일을 업로드해 주세요.")
+else:
+    tab_all, tab_first, tab_second, tab_route = st.tabs(["🔥 통합 히트맵", "⏱️ 전반전만 보기", "⏱️ 후반전만 보기", "🧭 공격 루트 시퀀스 (시작~종료)"])
 
-    fig, axes = plt.subplots(1, num_teams, figsize=(8 * num_teams, 7))
-    if num_teams == 1:
-        axes = [axes]
+    def render_heatmap(period_filter=None, route_only=False):
+        num_teams = len(dfs)
+        if num_teams == 0:
+            return
 
-    for i, (t_name, team_df) in enumerate(dfs.items()):
-        ax = axes[i]
-        tdf = team_df.copy()
-        
-        # 공격 루트 전용 탭 선택 시 '시작 ~ 종료' 시퀀스 구간만 추출
-        if route_only:
-            tdf = extract_route_sequence(tdf)
+        fig, axes = plt.subplots(1, num_teams, figsize=(8 * num_teams, 7))
+        if num_teams == 1:
+            axes = [axes]
 
-        col_opts = tdf.columns.tolist()
-        col_x = next((c for c in ['X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
-        col_y = next((c for c in ['Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
-        col_period = next((c for c in ['경기시점', 'period', 'Period'] if c in col_opts), None)
+        for i, (t_name, team_df) in enumerate(dfs.items()):
+            ax = axes[i]
+            tdf = team_df.copy()
+            
+            # 공격 루트 전용 탭 선택 시 '시작 ~ 종료' 시퀀스 구간만 추출
+            if route_only:
+                tdf = extract_route_sequence(tdf)
 
-        # 전반/후반 기간 필터링
-        if period_filter and col_period is not None:
-            tdf = tdf[tdf[col_period].astype(str).str.contains(period_filter, case=False, na=False)]
+            col_opts = tdf.columns.tolist()
+            col_x = next((c for c in ['X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
+            col_y = next((c for c in ['Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
+            col_period = next((c for c in ['경기시점', 'period', 'Period'] if c in col_opts), None)
 
-        if len(tdf) == 0:
-            ax.set_facecolor(pitch_bg)
-            msg = f"공격 루트 (시작~종료) 구간" if route_only else f"{period_filter}"
-            ax.text(pitch_x_val/2, pitch_y_val/2, f"{msg} 데이터가 존재하지 않습니다", 
-                    ha='center', va='center', color='white', fontsize=12, fontweight='bold')
-            ax.set_xlim(-5, pitch_x_val + 5)
-            ax.set_ylim(-7, pitch_y_val + 5)
-            ax.axis('off')
-            continue
+            # 전반/후반 기간 필터링
+            if period_filter and col_period is not None:
+                tdf = tdf[tdf[col_period].astype(str).str.contains(period_filter, case=False, na=False)]
 
-        # 후반전 진영 180도 자동 반전 (X축, Y축 동시)
-        if flip_second_half and col_period is not None:
-            second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
-            tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
-            tdf.loc[second_half_mask, col_y] = pitch_y_val - tdf.loc[second_half_mask, col_y]
+            if len(tdf) == 0:
+                ax.set_facecolor(pitch_bg)
+                msg = f"공격 루트 (시작~종료) 구간" if route_only else f"{period_filter}"
+                ax.text(pitch_x_val/2, pitch_y_val/2, f"{msg} 데이터가 존재하지 않습니다", 
+                        ha='center', va='center', color='white', fontsize=12, fontweight='bold')
+                ax.set_xlim(-5, pitch_x_val + 5)
+                ax.set_ylim(-7, pitch_y_val + 5)
+                ax.axis('off')
+                continue
 
-        if flip_y_axis:
-            tdf[col_y] = pitch_y_val - tdf[col_y]
+            # 후반전 진영 180도 자동 반전 (X축, Y축 동시)
+            if flip_second_half and col_period is not None:
+                second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
+                tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
+                tdf.loc[second_half_mask, col_y] = pitch_y_val - tdf.loc[second_half_mask, col_y]
 
-        if auto_scale and tdf[col_x].max() > 0 and tdf[col_y].max() > 0:
-            px = (tdf[col_x] / tdf[col_x].max()) * pitch_x_val
-            py = (tdf[col_y] / tdf[col_y].max()) * pitch_y_val
-        else:
-            px = tdf[col_x]
-            py = tdf[col_y]
+            if flip_y_axis:
+                tdf[col_y] = pitch_y_val - tdf[col_y]
 
-        current_attack_dir = team_attack_dirs[t_name]
-        if period_filter == "후반" and not flip_second_half:
-            current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
+            if auto_scale and tdf[col_x].max() > 0 and tdf[col_y].max() > 0:
+                px = (tdf[col_x] / tdf[col_x].max()) * pitch_x_val
+                py = (tdf[col_y] / tdf[col_y].max()) * pitch_y_val
+            else:
+                px = tdf[col_x]
+                py = tdf[col_y]
 
-        draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
+            current_attack_dir = team_attack_dirs[t_name]
+            if period_filter == "후반" and not flip_second_half:
+                current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
-        if len(tdf) > 2:
-            sns.kdeplot(x=px, y=py, cmap=team_colors[t_name], fill=True, thresh=0.03, levels=30, alpha=0.75, ax=ax)
+            draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
 
-        ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
+            if len(tdf) > 2:
+                sns.kdeplot(x=px, y=py, cmap=team_colors[t_name], fill=True, thresh=0.03, levels=30, alpha=0.75, ax=ax)
 
-    fig.patch.set_facecolor('#1e1e1e')
-    st.pyplot(fig)
+            ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
-with tab_all:
-    render_heatmap(period_filter=None, route_only=False)
+        fig.patch.set_facecolor('#1e1e1e')
+        st.pyplot(fig)
 
-with tab_first:
-    render_heatmap(period_filter="전반", route_only=False)
+    with tab_all:
+        render_heatmap(period_filter=None, route_only=False)
 
-with tab_second:
-    render_heatmap(period_filter="후반", route_only=False)
+    with tab_first:
+        render_heatmap(period_filter="전반", route_only=False)
 
-with tab_route:
-    render_heatmap(period_filter=None, route_only=True)
+    with tab_second:
+        render_heatmap(period_filter="후반", route_only=False)
+
+    with tab_route:
+        render_heatmap(period_filter=None, route_only=True)
