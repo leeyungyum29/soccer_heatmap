@@ -88,7 +88,7 @@ def draw_pitch(ax, pitch_x=95.0, pitch_y=57.0, pitch_color='#7ec850', line_color
     ax.set_aspect('equal')
     ax.axis('off')
 
-# 다중 파일 로드 함수
+# 파일 로드 함수 (단일/복수 업로드 모두 대응)
 def load_multiple_files(files):
     if not files:
         return None
@@ -99,6 +99,7 @@ def load_multiple_files(files):
         else:
             temp_df = pd.read_csv(file)
         
+        # 파일명에 전반/후반이 있는 경우에만 보조적으로 반영
         if '경기시점' not in temp_df.columns:
             if '전반' in file.name:
                 temp_df['경기시점'] = '전반'
@@ -108,7 +109,7 @@ def load_multiple_files(files):
     
     return pd.concat(df_list, ignore_index=True) if df_list else None
 
-# '공격 루트 시작' ~ '공격 루트 종료' 구간(시퀀스) 데이터만 추출
+# '공격 루트 시작' ~ '공격 루트 종료' 구간 시퀀스 추출
 def extract_route_sequence(df):
     col_opts = df.columns.tolist()
     col_event = next((c for c in ['이벤트', 'event', 'Event'] if c in col_opts), None)
@@ -122,11 +123,9 @@ def extract_route_sequence(df):
     for idx, row in df.iterrows():
         event_val = str(row[col_event]).strip()
         
-        # '공격'과 '시작' 단어가 포함된 지점부터 추적 시작
         if '공격' in event_val and '시작' in event_val:
             in_sequence = True
             valid_indices.append(idx)
-        # '공격'과 '종료'(또는 '끝') 단어가 포함된 지점에서 구간 마감
         elif '공격' in event_val and ('종료' in event_val or '끝' in event_val):
             if in_sequence:
                 valid_indices.append(idx)
@@ -140,13 +139,13 @@ def extract_route_sequence(df):
 # =========================================================
 # 3. Streamlit UI 및 데이터 처리
 # =========================================================
-st.title("⚽ 전/후반 자동 진영 통일 축구 히트맵 분석기")
+st.title("⚽ 전/후반 축구 히트맵 분석기")
 
-st.sidebar.header("📁 팀별 데이터 업로드 (드래그 & 드롭)")
-st.sidebar.info("💡 팀당 전반/후반 2개 파일을 한 번에 복수 선택해서 올려주세요.")
+st.sidebar.header("📁 팀별 데이터 업로드")
+st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 파일들을 업로드해 주세요.")
 
-home_files = st.sidebar.file_uploader("🏠 홈팀 태깅 파일들 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
-away_files = st.sidebar.file_uploader("✈️ 어웨이팀 태깅 파일들 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
+home_files = st.sidebar.file_uploader("🏠 홈팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
+away_files = st.sidebar.file_uploader("✈️ 어웨이팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 
 st.sidebar.subheader("🏷️ 팀명 직접 지정")
 home_name_input = st.sidebar.text_input("홈팀 이름 (Home Team)", value="Home Team")
@@ -155,7 +154,9 @@ away_name_input = st.sidebar.text_input("어웨이팀 이름 (Away Team)", value
 st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
 pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=95.0, step=1.0)
 pitch_y_val = st.sidebar.number_input("경기장 세로 길이 (m)", value=57.0, step=1.0)
-flip_second_half = st.sidebar.checkbox("🔄 후반전 진영 180° 자동 반전 (X, Y축 모두 반전)", value=True)
+
+# 추출 엑셀 자체에 회전이 적용되어 있으므로 기본값 False 처리
+flip_second_half = st.sidebar.checkbox("🔄 후반전 진영 180° 자동 반전 (필요 시 체크)", value=False)
 flip_y_axis = st.sidebar.checkbox("↕️ Y축 상하 반전 (좌표 원점 수정용)", value=False)
 auto_scale = st.sidebar.checkbox("태깅 좌표 자동 정규화 (Scaling)", value=False)
 
@@ -181,7 +182,6 @@ st.sidebar.subheader("🎨 팀별 히트맵 색상 및 방향")
 team_colors = {}
 team_attack_dirs = {}
 
-# 파일이 업로드된 팀이 있을 경우 설정 옵션 생성, 없으면 기본값 세팅
 target_teams = list(dfs.keys()) if len(dfs) > 0 else [home_name_input, away_name_input]
 
 for i, t_name in enumerate(target_teams):
@@ -204,7 +204,6 @@ pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#7EC850")
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
 
-# 파일이 아무것도 업로드되지 않았을 때 안내 메시지 출력
 if len(dfs) == 0:
     st.warning("⚠️ 왼쪽 사이드바에서 홈팀 또는 어웨이팀의 태깅 데이터(CSV/XLSX) 파일을 업로드해 주세요.")
 else:
@@ -223,7 +222,6 @@ else:
             ax = axes[i]
             tdf = team_df.copy()
             
-            # 공격 루트 전용 탭 선택 시 '시작 ~ 종료' 시퀀스 구간만 추출
             if route_only:
                 tdf = extract_route_sequence(tdf)
 
@@ -232,7 +230,12 @@ else:
             col_y = next((c for c in ['Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
             col_period = next((c for c in ['경기시점', 'period', 'Period'] if c in col_opts), None)
 
-            # 전반/후반 기간 필터링
+            # ---------------------------------------------------------
+            # TypeError 방지: X, Y 좌표를 강제로 숫자(float) 타입으로 변환
+            # ---------------------------------------------------------
+            tdf[col_x] = pd.to_numeric(tdf[col_x], errors='coerce')
+            tdf[col_y] = pd.to_numeric(tdf[col_y], errors='coerce')
+
             if period_filter and col_period is not None:
                 tdf = tdf[tdf[col_period].astype(str).str.contains(period_filter, case=False, na=False)]
 
@@ -246,7 +249,7 @@ else:
                 ax.axis('off')
                 continue
 
-            # 후반전 진영 180도 자동 반전 (X축, Y축 동시)
+            # 사용자가 체크박스를 켰을 때만 180도 반전 수행
             if flip_second_half and col_period is not None:
                 second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
                 tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
@@ -263,7 +266,7 @@ else:
                 py = tdf[col_y]
 
             current_attack_dir = team_attack_dirs[t_name]
-            if period_filter == "후반" and not flip_second_half:
+            if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
             draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
