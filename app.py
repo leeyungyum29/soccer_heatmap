@@ -35,17 +35,17 @@ plt.rcParams['axes.unicode_minus'] = False
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
 # =========================================================
-# 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 공격 방향 화살표 그리기
+# 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 화살표 그리기
 # =========================================================
-def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='white', attack_dir="L->R"):
+def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', attack_dir="L->R"):
     # 외곽선 및 중앙선
-    ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2)
-    ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2)
+    ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2.5)
+    ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2.5)
     
     # 센터 서클
-    center_circle = plt.Circle((pitch_x/2, pitch_y/2), 9.15, color=line_color, fill=False, lw=2)
+    center_circle = plt.Circle((pitch_x/2, pitch_y/2), 9.15, color=line_color, fill=False, lw=2.5)
     ax.add_patch(center_circle)
-    ax.plot(pitch_x/2, pitch_y/2, 'o', color=line_color)
+    ax.plot(pitch_x/2, pitch_y/2, 'o', color=line_color, ms=4)
     
     # 페널티 박스
     box_y_bottom = (pitch_y - 40.32) / 2
@@ -53,15 +53,15 @@ def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='white', attack
     goal_y_bottom = (pitch_y - 18.32) / 2
     goal_y_top = (pitch_y + 18.32) / 2
     
-    ax.plot([0, 16.5, 16.5, 0], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2)
-    ax.plot([0, 5.5, 5.5, 0], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2)
+    ax.plot([0, 16.5, 16.5, 0], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
+    ax.plot([0, 5.5, 5.5, 0], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
     
-    ax.plot([pitch_x, pitch_x - 16.5, pitch_x - 16.5, pitch_x], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2)
-    ax.plot([pitch_x, pitch_x - 5.5, pitch_x - 5.5, pitch_x], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2)
+    ax.plot([pitch_x, pitch_x - 16.5, pitch_x - 16.5, pitch_x], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
+    ax.plot([pitch_x, pitch_x - 5.5, pitch_x - 5.5, pitch_x], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
     
     # 골대
-    ax.plot([0, -2, -2, 0], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color=line_color, lw=2)
-    ax.plot([pitch_x, pitch_x + 2, pitch_x + 2, pitch_x], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color=line_color, lw=2)
+    ax.plot([0, -2, -2, 0], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
+    ax.plot([pitch_x, pitch_x + 2, pitch_x + 2, pitch_x], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
 
     # 공격 방향 화살표 표시
     arrow_y = -3.5
@@ -70,16 +70,16 @@ def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='white', attack
             '공격 방향 (Attack) ▶', 
             xy=(pitch_x * 0.7, arrow_y), 
             xytext=(pitch_x * 0.3, arrow_y),
-            arrowprops=dict(facecolor='white', edgecolor='white', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='white', fontsize=11, fontweight='bold'
+            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
+            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
         )
     else:
         ax.annotate(
             '◀ 공격 방향 (Attack)', 
             xy=(pitch_x * 0.3, arrow_y), 
             xytext=(pitch_x * 0.7, arrow_y),
-            arrowprops=dict(facecolor='white', edgecolor='white', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='white', fontsize=11, fontweight='bold'
+            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
+            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
         )
 
     ax.set_xlim(-5, pitch_x + 5)
@@ -166,17 +166,23 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
-# 초록 피치 전용 노랑-주황-빨강 커스텀 컬러맵
-green_heatmap_colors = [(0.9, 0.9, 0.4, 0.0), (1.0, 0.8, 0.2, 0.6), (1.0, 0.5, 0.0, 0.8), (0.9, 0.1, 0.1, 0.95)]
-green_cmap = LinearSegmentedColormap.from_list("green_pitch_heatmap", green_heatmap_colors)
+# 이미지에 완벽히 부합하는 Sofascore 스타일 커스텀 히트맵 컬러맵
+# 투명 -> 민트/연두 -> 밝은 노랑 -> 주황 -> 딥 레드
+sofascore_colors = [
+    (0.65, 0.95, 0.70, 0.0),  # 낮은 영역 (투명)
+    (0.60, 0.95, 0.65, 0.55), # 라이트 그린/민트
+    (0.98, 0.95, 0.45, 0.75), # 밝은 레몬 옐로우
+    (0.95, 0.60, 0.25, 0.88), # 주황
+    (0.80, 0.20, 0.20, 0.95)  # 딥 레드
+]
+sofascore_cmap = LinearSegmentedColormap.from_list("sofascore_style", sofascore_colors)
 
 COLOR_PALETTES = {
-    "열지형 (초록 피치 추천: 노랑-주황-빨강)": green_cmap,
+    "화이트 피치 추천 (민트-노랑-빨강)": sofascore_cmap,
     "열지형 기본 (YlOrRd)": "YlOrRd",
     "레드 (강렬한 빨강)": "Reds",
     "블루 (시원한 파랑)": "Blues",
-    "퍼플 (보라)": "Purples",
-    "불꽃 (hot)": "hot"
+    "퍼플 (보라)": "Purples"
 }
 
 st.sidebar.subheader("🎨 팀별 히트맵 색상 및 디자인")
@@ -198,8 +204,8 @@ for i, t_name in enumerate(target_teams):
     )
     team_attack_dirs[t_name] = "L->R" if dir_choice == "왼쪽 ➔ 오른쪽" else "R->L"
 
-pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#1E4D2B")
-bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.50, step=0.05)
+pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#FFFFFF")
+bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.45, step=0.05)
 
 # =========================================================
 # 4. 히트맵 시각화 (통합 / 전반 / 후반 / 공격 루트 시퀀스)
@@ -242,7 +248,7 @@ else:
                 ax.set_facecolor(pitch_bg)
                 msg = f"공격 루트 (시작~종료) 구간" if route_only else f"{period_filter}"
                 ax.text(pitch_x_val/2, pitch_y_val/2, f"{msg} 데이터가 존재하지 않습니다", 
-                        ha='center', va='center', color='white', fontsize=12, fontweight='bold')
+                        ha='center', va='center', color='#555555', fontsize=12, fontweight='bold')
                 ax.set_xlim(-5, pitch_x_val + 5)
                 ax.set_ylim(-7, pitch_y_val + 5)
                 ax.axis('off')
@@ -267,28 +273,28 @@ else:
             if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
-            # 핵심: 서브플롯(ax) 배경색과 전체 그림(fig) 배경색을 사용자가 지정한 초록 잔디색(pitch_bg)으로 일치시킴
+            # 1. 흰색/클린 피치 배경 세팅
             ax.set_facecolor(pitch_bg)
 
-            # 1. 히트맵 렌더링
+            # 2. 업로드한 이미지 스타일 맞춤 히트맵 (민트 -> 노랑 -> 주황 -> 딥 레드)
             if len(tdf) > 2:
                 sns.kdeplot(
                     x=px, y=py, 
                     cmap=team_colors[t_name], 
                     fill=True, 
-                    thresh=0.05,             
+                    thresh=0.03,             
                     bw_adjust=bw_val,          
-                    levels=50,               
-                    alpha=0.80, 
+                    levels=60,               
+                    alpha=0.85, 
                     linewidths=0,
                     ax=ax,
                     clip=((0, pitch_x_val), (0, pitch_y_val))
                 )
 
-            # 2. 피치 라인 그리기
-            draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='white', attack_dir=current_attack_dir)
+            # 3. 은은하고 깔끔한 라이트 회색 피치 라인 덧그리기
+            draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
 
-            ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
+            ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='#222222', pad=12, fontweight='bold')
 
         fig.patch.set_facecolor(pitch_bg)
         st.pyplot(fig)
