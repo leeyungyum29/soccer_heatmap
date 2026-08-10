@@ -7,6 +7,7 @@ import seaborn as sns
 import platform
 import os
 import urllib.request
+from matplotlib.colors import LinearSegmentedColormap
 
 # =========================================================
 # 1. Streamlit Cloud 전용 나눔고딕 폰트 자동 다운로드 및 등록
@@ -36,7 +37,7 @@ st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout
 # =========================================================
 # 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 공격 방향 화살표 그리기
 # =========================================================
-def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#7ec850', line_color='white', attack_dir="L->R"):
+def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#102238', line_color='white', attack_dir="L->R"):
     ax.set_facecolor(pitch_color)
     
     # 외곽선 및 중앙선
@@ -88,7 +89,7 @@ def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#7ec850', line_colo
     ax.set_aspect('equal')
     ax.axis('off')
 
-# 파일 로드 함수 (단일/복수 업로드 모두 대응)
+# 파일 로드 도우미
 def load_multiple_files(files):
     if not files:
         return None
@@ -99,7 +100,6 @@ def load_multiple_files(files):
         else:
             temp_df = pd.read_csv(file)
         
-        # 파일명에 전반/후반이 있는 경우에만 보조적으로 반영
         if '경기시점' not in temp_df.columns:
             if '전반' in file.name:
                 temp_df['경기시점'] = '전반'
@@ -139,7 +139,7 @@ def extract_route_sequence(df):
 # =========================================================
 # 3. Streamlit UI 및 데이터 처리
 # =========================================================
-st.title("⚽ 전/후반 축구 히트맵 분석기")
+st.title("⚽ 국민대학교 공식 템플릿 축구 히트맵 분석기")
 
 st.sidebar.header("📁 팀별 데이터 업로드")
 st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 파일들을 업로드해 주세요.")
@@ -155,7 +155,6 @@ st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
 pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=105.0, step=1.0)
 pitch_y_val = st.sidebar.number_input("경기장 세로 길이 (m)", value=68.0, step=1.0)
 
-# 추출 엑셀 자체에 회전이 적용되어 있으므로 기본값 False 처리
 flip_second_half = st.sidebar.checkbox("🔄 후반전 진영 180° 자동 반전 (필요 시 체크)", value=False)
 flip_y_axis = st.sidebar.checkbox("↕️ Y축 상하 반전 (좌표 원점 수정용)", value=False)
 auto_scale = st.sidebar.checkbox("태깅 좌표 자동 정규화 (Scaling)", value=False)
@@ -169,23 +168,27 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
+# 국민대 전용 커스텀 컬러맵
+kmu_colors = [(0.3, 0.6, 0.9, 0.0), (0.2, 0.7, 1.0, 0.6), (0.1, 0.9, 0.9, 0.8), (0.95, 0.85, 0.2, 0.9), (0.95, 0.3, 0.1, 1.0)]
+kmu_cmap = LinearSegmentedColormap.from_list("kmu_heatmap", kmu_colors)
+
 COLOR_PALETTES = {
+    "국민대 시그니처 (블루-핫스팟)": kmu_cmap,
     "열지형 (초록-노랑-빨강)": "YlOrRd",
     "레드 (강렬한 빨강)": "Reds",
     "블루 (시원한 파랑)": "Blues",
     "퍼플 (보라)": "Purples",
-    "오렌지 (주황)": "Oranges",
     "불꽃 (hot)": "hot"
 }
 
-st.sidebar.subheader("🎨 팀별 히트맵 색상 및 방향")
+st.sidebar.subheader("🎨 팀별 히트맵 색상 및 디자인")
 team_colors = {}
 team_attack_dirs = {}
 
 target_teams = list(dfs.keys()) if len(dfs) > 0 else [home_name_input, away_name_input]
 
 for i, t_name in enumerate(target_teams):
-    default_idx = 0 if i == 0 else 2
+    default_idx = 0
     selected_p = st.sidebar.selectbox(f"[{t_name}] 색상 테마", options=list(COLOR_PALETTES.keys()), index=default_idx, key=f"color_{i}")
     team_colors[t_name] = COLOR_PALETTES[selected_p]
     
@@ -197,7 +200,8 @@ for i, t_name in enumerate(target_teams):
     )
     team_attack_dirs[t_name] = "L->R" if dir_choice == "왼쪽 ➔ 오른쪽" else "R->L"
 
-pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#7EC850")
+pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#102238")
+bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.50, step=0.05)
 
 # =========================================================
 # 4. 히트맵 시각화 (통합 / 전반 / 후반 / 공격 루트 시퀀스)
@@ -226,12 +230,10 @@ else:
                 tdf = extract_route_sequence(tdf)
 
             col_opts = tdf.columns.tolist()
-            # 시작X, 시작Y, 이벤트명 자동 인식
             col_x = next((c for c in ['시작X', 'X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
             col_y = next((c for c in ['시작Y', 'Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
             col_period = next((c for c in ['경기시점', 'period', 'Period', '시점'] if c in col_opts), None)
 
-            # TypeError 방지: X, Y 좌표를 강제로 숫자(float) 타입으로 변환
             tdf[col_x] = pd.to_numeric(tdf[col_x], errors='coerce')
             tdf[col_y] = pd.to_numeric(tdf[col_y], errors='coerce')
 
@@ -248,7 +250,6 @@ else:
                 ax.axis('off')
                 continue
 
-            # 사용자가 체크박스를 켰을 때만 180도 반전 수행
             if flip_second_half and col_period is not None:
                 second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
                 tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
@@ -268,25 +269,30 @@ else:
             if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
+            # 1. 국민대 네이비 피치 배경
             draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
 
-            # 구름 형태 밀도 스타일 및 클리핑 적용
+            # 2. 국민대 히트맵 렌더링
             if len(tdf) > 2:
                 sns.kdeplot(
                     x=px, y=py, 
                     cmap=team_colors[t_name], 
                     fill=True, 
-                    thresh=0.08,             # 빈 영역 투명 처리
-                    bw_adjust=0.35,          # 세밀한 구름 형태
-                    levels=40,               # 색상 단계
-                    alpha=0.85, 
+                    thresh=0.05,             
+                    bw_adjust=bw_val,          
+                    levels=50,               
+                    alpha=0.80, 
+                    linewidths=0,
                     ax=ax,
-                    clip=((0, pitch_x_val), (0, pitch_y_val)) # 피치 내부 클리핑
+                    clip=((0, pitch_x_val), (0, pitch_y_val))
                 )
+
+            # 3. 화이트 선명도 피치 라인 재묘화
+            draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color='none', attack_dir=current_attack_dir)
 
             ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
-        fig.patch.set_facecolor('#1e1e1e')
+        fig.patch.set_facecolor('#0C1B2D')
         st.pyplot(fig)
 
     with tab_all:
