@@ -151,7 +151,7 @@ def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', atta
             xy=(pitch_x * 0.7, arrow_y), 
             xytext=(pitch_x * 0.3, arrow_y),
             arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
+            ha='center', va='center', color='#555962', fontsize=12, fontweight='bold'
         )
     else:
         ax.annotate(
@@ -159,7 +159,7 @@ def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', atta
             xy=(pitch_x * 0.3, arrow_y), 
             xytext=(pitch_x * 0.7, arrow_y),
             arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
+            ha='center', va='center', color='#555962', fontsize=12, fontweight='bold'
         )
 
     ax.set_xlim(-5, pitch_x + 5)
@@ -245,7 +245,7 @@ pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#FFFFFF")
 bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.45, step=0.05)
 
 # =========================================================
-# 4. 히트맵 시각화 및 자동 규칙 파일명 저장 기능
+# 4. 히트맵 시각화 및 팀별 개별 다운로드 기능
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
 
@@ -259,12 +259,16 @@ else:
         if num_teams == 0:
             return
 
-        fig, axes = plt.subplots(1, num_teams, figsize=(8 * num_teams, 7))
+        # 화면용 통합 보기 그리기
+        fig_screen, axes_screen = plt.subplots(1, num_teams, figsize=(8 * num_teams, 7))
         if num_teams == 1:
-            axes = [axes]
+            axes_screen = [axes_screen]
+
+        # 경기 제목 대진 표시
+        vs_title = f"{home_name_input} vs {away_name_input}"
 
         for i, (t_name, team_df) in enumerate(dfs.items()):
-            ax = axes[i]
+            ax = axes_screen[i]
             tdf = team_df.copy()
             
             if route_only:
@@ -285,13 +289,12 @@ else:
                 ax.set_facecolor(pitch_bg)
                 msg = f"공격 루트 (시작~종료) 구간" if route_only else f"{period_filter}"
                 ax.text(pitch_x_val/2, pitch_y_val/2, f"{msg} 데이터가 존재하지 않습니다", 
-                        ha='center', va='center', color='#555555', fontsize=12, fontweight='bold')
+                        ha='center', va='center', color='#555555', fontsize=13, fontweight='bold')
                 ax.set_xlim(-5, pitch_x_val + 5)
                 ax.set_ylim(-7, pitch_y_val + 5)
                 ax.axis('off')
                 continue
 
-            # 팀별로 독립 설정된 180도 반전 옵션 적용
             if team_flip_option.get(t_name, False) and col_period is not None:
                 second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
                 tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
@@ -329,25 +332,94 @@ else:
 
             draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
 
-            ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='#222222', pad=12, fontweight='bold')
+            # 요청 반영: 상단 대진표 + 팀 히트맵 2줄 타이틀 (굵게 및 크기 키움)
+            ax.set_title(f"{vs_title}
+[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
 
-        fig.patch.set_facecolor(pitch_bg)
-        st.pyplot(fig)
+        fig_screen.patch.set_facecolor(pitch_bg)
+        st.pyplot(fig_screen)
 
-        suffix = f"_{period_filter}" if period_filter else ("_공격루트" if route_only else "")
-        download_file_name = f"{match_no_input}_{match_date_input}_{home_name_input}_{away_name_input}_히트맵{suffix}.png"
+        # 팀별 독립 다운로드 버튼 생성
+        st.markdown("### 📥 팀별 히트맵 이미지 개별 다운로드")
+        col_btns = st.columns(num_teams)
 
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none')
-        buf.seek(0)
+        for i, (t_name, team_df) in enumerate(dfs.items()):
+            with col_btns[i]:
+                # 단일 팀 개별 Figure 생성
+                fig_single, ax_single = plt.subplots(1, 1, figsize=(8, 7))
+                tdf = team_df.copy()
+                
+                if route_only:
+                    tdf = extract_route_sequence(tdf)
 
-        st.download_button(
-            label=f"📥 [{download_file_name}] 고화질 이미지 다운로드 (300 DPI)",
-            data=buf,
-            file_name=download_file_name,
-            mime="image/png",
-            key=f"btn_download_{tab_key}"
-        )
+                col_opts = tdf.columns.tolist()
+                col_x = next((c for c in ['시작X', 'X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
+                col_y = next((c for c in ['시작Y', 'Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
+                col_period = next((c for c in ['경기시점', 'period', 'Period', '시점'] if c in col_opts), None)
+
+                tdf[col_x] = pd.to_numeric(tdf[col_x], errors='coerce')
+                tdf[col_y] = pd.to_numeric(tdf[col_y], errors='coerce')
+
+                if period_filter and col_period is not None:
+                    tdf = tdf[tdf[col_period].astype(str).str.contains(period_filter, case=False, na=False)]
+
+                if len(tdf) > 0:
+                    if team_flip_option.get(t_name, False) and col_period is not None:
+                        second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
+                        tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
+                        tdf.loc[second_half_mask, col_y] = pitch_y_val - tdf.loc[second_half_mask, col_y]
+
+                    if flip_y_axis:
+                        tdf[col_y] = pitch_y_val - tdf[col_y]
+
+                    if auto_scale and tdf[col_x].max() > 0 and tdf[col_y].max() > 0:
+                        px = (tdf[col_x] / tdf[col_x].max()) * pitch_x_val
+                        py = (tdf[col_y] / tdf[col_y].max()) * pitch_y_val
+                    else:
+                        px = tdf[col_x]
+                        py = tdf[col_y]
+
+                    current_attack_dir = team_attack_dirs[t_name]
+                    if period_filter == "후반" and team_flip_option.get(t_name, False):
+                        current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
+
+                    ax_single.set_facecolor(pitch_bg)
+
+                    if len(tdf) > 2:
+                        sns.kdeplot(
+                            x=px, y=py, 
+                            cmap=team_colors[t_name], 
+                            fill=True, 
+                            thresh=0.03,             
+                            bw_adjust=bw_val,          
+                            levels=60,               
+                            alpha=0.85, 
+                            linewidths=0,
+                            ax=ax_single,
+                            clip=((0, pitch_x_val), (0, pitch_y_val))
+                        )
+
+                    draw_pitch_lines(ax_single, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
+                    ax_single.set_title(f"{vs_title}
+[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
+                    fig_single.patch.set_facecolor(pitch_bg)
+
+                    # 요청 반영: 파일명에 다운로드 받는 팀 이름만 단독 표시
+                    suffix = f"_{period_filter}" if period_filter else ("_공격루트" if route_only else "")
+                    download_file_name = f"{match_no_input}_{match_date_input}_{t_name}_히트맵{suffix}.png"
+
+                    buf = io.BytesIO()
+                    fig_single.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor=fig_single.get_facecolor(), edgecolor='none')
+                    buf.seek(0)
+
+                    st.download_button(
+                        label=f"📥 [{t_name}] 히트맵 다운로드",
+                        data=buf,
+                        file_name=download_file_name,
+                        mime="image/png",
+                        key=f"btn_download_{t_name}_{tab_key}"
+                    )
+                plt.close(fig_single)
 
     with tab_all:
         render_heatmap(period_filter=None, route_only=False, tab_key="all")
