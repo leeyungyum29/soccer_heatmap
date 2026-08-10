@@ -7,6 +7,7 @@ import seaborn as sns
 import platform
 import os
 import io
+import re
 import urllib.request
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -35,66 +36,47 @@ plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
-# 파일명에서 팀명(마지막 단어) 자동 추출 함수
-def extract_team_name_from_files(file_list, default_name):
-    if file_list:
-        try:
-            filename = file_list[0].name
-            base_name = os.path.splitext(filename)[0]
-            words = base_name.strip().split()
-            if words:
-                return words[-1]
-        except Exception:
-            pass
-    return default_name
-
 # =========================================================
-# 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 화살표 그리기
+# 파일명에서 경기 번호, 날짜, 팀명 자동 파싱 함수
 # =========================================================
-def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', attack_dir="L->R"):
-    ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2.5)
-    ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2.5)
-    
-    center_circle = plt.Circle((pitch_x/2, pitch_y/2), 9.15, color=line_color, fill=False, lw=2.5)
-    ax.add_patch(center_circle)
-    ax.plot(pitch_x/2, pitch_y/2, 'o', color=line_color, ms=4)
-    
-    box_y_bottom = (pitch_y - 40.32) / 2
-    box_y_top = (pitch_y + 40.32) / 2
-    goal_y_bottom = (pitch_y - 18.32) / 2
-    goal_y_top = (pitch_y + 18.32) / 2
-    
-    ax.plot([0, 16.5, 16.5, 0], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
-    ax.plot([0, 5.5, 5.5, 0], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
-    
-    ax.plot([pitch_x, pitch_x - 16.5, pitch_x - 16.5, pitch_x], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
-    ax.plot([pitch_x, pitch_x - 5.5, pitch_x - 5.5, pitch_x], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
-    
-    ax.plot([0, -2, -2, 0], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
-    ax.plot([pitch_x, pitch_x + 2, pitch_x + 2, pitch_x], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
+def parse_match_metadata(home_files, away_files):
+    match_no = "01"
+    match_date = "0810"
+    home_team = "홈팀"
+    away_team = "어웨이팀"
 
-    arrow_y = -3.5
-    if attack_dir == "L->R":
-        ax.annotate(
-            '공격 방향 (Attack) ▶', 
-            xy=(pitch_x * 0.7, arrow_y), 
-            xytext=(pitch_x * 0.3, arrow_y),
-            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
-        )
-    else:
-        ax.annotate(
-            '◀ 공격 방향 (Attack)', 
-            xy=(pitch_x * 0.3, arrow_y), 
-            xytext=(pitch_x * 0.7, arrow_y),
-            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
-            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
-        )
+    # 1. 경기 번호 및 날짜 추출 (업로드된 전체 파일 대상 탐색)
+    all_files = (home_files or []) + (away_files or [])
+    for f in all_files:
+        filename = os.path.splitext(f.name)[0].strip()
+        
+        # '01_0810' 형태 패턴 파싱
+        m = re.search(r'(\d{2})_(\d{4})', filename)
+        if m:
+            match_no = m.group(1)
+            match_date = m.group(2)
+            break
+        
+        # 공백 분할 패턴 파싱
+        tokens = filename.split()
+        for t in tokens:
+            if len(t) == 2 and t.isdigit():
+                match_no = t
+            elif len(t) == 4 and t.isdigit():
+                match_date = t
 
-    ax.set_xlim(-5, pitch_x + 5)
-    ax.set_ylim(-7, pitch_y + 5)
-    ax.set_aspect('equal')
-    ax.axis('off')
+    # 2. 파일명 맨 마지막 단어에서 팀명 추출
+    if home_files:
+        words = os.path.splitext(home_files[0].name)[0].strip().split()
+        if words:
+            home_team = words[-1]
+
+    if away_files:
+        words = os.path.splitext(away_files[0].name)[0].strip().split()
+        if words:
+            away_team = words[-1]
+
+    return match_no, match_date, home_team, away_team
 
 # 파일 로드 도우미
 def load_multiple_files(files):
@@ -144,6 +126,54 @@ def extract_route_sequence(df):
     return df.loc[valid_indices].copy()
 
 # =========================================================
+# 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 화살표 그리기
+# =========================================================
+def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', attack_dir="L->R"):
+    ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2.5)
+    ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2.5)
+    
+    center_circle = plt.Circle((pitch_x/2, pitch_y/2), 9.15, color=line_color, fill=False, lw=2.5)
+    ax.add_patch(center_circle)
+    ax.plot(pitch_x/2, pitch_y/2, 'o', color=line_color, ms=4)
+    
+    box_y_bottom = (pitch_y - 40.32) / 2
+    box_y_top = (pitch_y + 40.32) / 2
+    goal_y_bottom = (pitch_y - 18.32) / 2
+    goal_y_top = (pitch_y + 18.32) / 2
+    
+    ax.plot([0, 16.5, 16.5, 0], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
+    ax.plot([0, 5.5, 5.5, 0], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
+    
+    ax.plot([pitch_x, pitch_x - 16.5, pitch_x - 16.5, pitch_x], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
+    ax.plot([pitch_x, pitch_x - 5.5, pitch_x - 5.5, pitch_x], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
+    
+    ax.plot([0, -2, -2, 0], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
+    ax.plot([pitch_x, pitch_x + 2, pitch_x + 2, pitch_x], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
+
+    arrow_y = -3.5
+    if attack_dir == "L->R":
+        ax.annotate(
+            '공격 방향 (Attack) ▶', 
+            xy=(pitch_x * 0.7, arrow_y), 
+            xytext=(pitch_x * 0.3, arrow_y),
+            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
+            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
+        )
+    else:
+        ax.annotate(
+            '◀ 공격 방향 (Attack)', 
+            xy=(pitch_x * 0.3, arrow_y), 
+            xytext=(pitch_x * 0.7, arrow_y),
+            arrowprops=dict(facecolor='#71757E', edgecolor='#71757E', width=2, headwidth=8, headlength=10),
+            ha='center', va='center', color='#555962', fontsize=11, fontweight='bold'
+        )
+
+    ax.set_xlim(-5, pitch_x + 5)
+    ax.set_ylim(-7, pitch_y + 5)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+# =========================================================
 # 3. Streamlit UI 및 데이터 처리
 # =========================================================
 st.title("⚽ 축구 히트맵 분석기")
@@ -154,13 +184,14 @@ st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 �
 home_files = st.sidebar.file_uploader("🏠 홈팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 away_files = st.sidebar.file_uploader("✈️ 어웨이팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 
-# 업로드된 파일명 맨 마지막 단어에서 팀명 자동 추출
-auto_home_name = extract_team_name_from_files(home_files, "Home Team")
-auto_away_name = extract_team_name_from_files(away_files, "Away Team")
+# 메타데이터 (경기번호, 날짜, 팀명) 자동 분석
+auto_no, auto_date, auto_home, auto_away = parse_match_metadata(home_files, away_files)
 
-st.sidebar.subheader("🏷️ 팀명 직접 지정")
-home_name_input = st.sidebar.text_input("홈팀 이름", value=auto_home_name)
-away_name_input = st.sidebar.text_input("어웨이팀 이름", value=auto_away_name)
+st.sidebar.subheader("🏷️ 경기 정보 및 팀명 설정")
+match_no_input = st.sidebar.text_input("경기 번호", value=auto_no)
+match_date_input = st.sidebar.text_input("경기 날짜", value=auto_date)
+home_name_input = st.sidebar.text_input("홈팀 이름 (왼쪽 팀)", value=auto_home)
+away_name_input = st.sidebar.text_input("어웨이팀 이름 (오른쪽 팀)", value=auto_away)
 
 st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
 pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=105.0, step=1.0)
@@ -220,7 +251,7 @@ pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#FFFFFF")
 bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.45, step=0.05)
 
 # =========================================================
-# 4. 히트맵 시각화 및 고화질 다운로드 기능
+# 4. 히트맵 시각화 및 자동 규칙 파일명 저장 기능
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
 
@@ -308,16 +339,16 @@ else:
         fig.patch.set_facecolor(pitch_bg)
         st.pyplot(fig)
 
-        # 고화질 PNG 파일 다운로드 버튼 추가
+        # 요청하신 명명 규칙 반영: 경기번호_오늘날짜_왼쪽팀명_오른쪽팀명_히트맵.png
+        suffix = f"_{period_filter}" if period_filter else ("_공격루트" if route_only else "")
+        download_file_name = f"{match_no_input}_{match_date_input}_{home_name_input}_{away_name_input}_히트맵{suffix}.png"
+
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none')
         buf.seek(0)
-        
-        filter_label = period_filter if period_filter else ("공격루트" if route_only else "통합")
-        download_file_name = f"축구_히트맵_{filter_label}.png"
 
         st.download_button(
-            label=f"📥 {filter_label} 히트맵 고화질 이미지 다운로드 (300 DPI PNG)",
+            label=f"📥 [{download_file_name}] 이미지 고화질 다운로드 (300 DPI)",
             data=buf,
             file_name=download_file_name,
             mime="image/png",
