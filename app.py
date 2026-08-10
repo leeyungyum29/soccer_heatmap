@@ -34,20 +34,30 @@ plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
+# 파일명에서 팀명(마지막 단어) 자동 추출 함수
+def extract_team_name_from_files(file_list, default_name):
+    if file_list:
+        try:
+            filename = file_list[0].name
+            base_name = os.path.splitext(filename)[0]
+            words = base_name.strip().split()
+            if words:
+                return words[-1]
+        except Exception:
+            pass
+    return default_name
+
 # =========================================================
 # 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 화살표 그리기
 # =========================================================
 def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', attack_dir="L->R"):
-    # 외곽선 및 중앙선
     ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2.5)
     ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2.5)
     
-    # 센터 서클
     center_circle = plt.Circle((pitch_x/2, pitch_y/2), 9.15, color=line_color, fill=False, lw=2.5)
     ax.add_patch(center_circle)
     ax.plot(pitch_x/2, pitch_y/2, 'o', color=line_color, ms=4)
     
-    # 페널티 박스
     box_y_bottom = (pitch_y - 40.32) / 2
     box_y_top = (pitch_y + 40.32) / 2
     goal_y_bottom = (pitch_y - 18.32) / 2
@@ -59,11 +69,9 @@ def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='#C5C8CE', atta
     ax.plot([pitch_x, pitch_x - 16.5, pitch_x - 16.5, pitch_x], [box_y_bottom, box_y_bottom, box_y_top, box_y_top], color=line_color, lw=2.5)
     ax.plot([pitch_x, pitch_x - 5.5, pitch_x - 5.5, pitch_x], [goal_y_bottom, goal_y_bottom, goal_y_top, goal_y_top], color=line_color, lw=2.5)
     
-    # 골대
     ax.plot([0, -2, -2, 0], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
     ax.plot([pitch_x, pitch_x + 2, pitch_x + 2, pitch_x], [pitch_y/2 - 3.66, pitch_y/2 - 3.66, pitch_y/2 + 3.66, pitch_y/2 + 3.66], color='#A0A4AB', lw=2.5)
 
-    # 공격 방향 화살표 표시
     arrow_y = -3.5
     if attack_dir == "L->R":
         ax.annotate(
@@ -145,9 +153,13 @@ st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 �
 home_files = st.sidebar.file_uploader("🏠 홈팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 away_files = st.sidebar.file_uploader("✈️ 어웨이팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 
+# 업로드된 파일명 맨 마지막 단어에서 팀명 자동 추출
+auto_home_name = extract_team_name_from_files(home_files, "Home Team")
+auto_away_name = extract_team_name_from_files(away_files, "Away Team")
+
 st.sidebar.subheader("🏷️ 팀명 직접 지정")
-home_name_input = st.sidebar.text_input("홈팀 이름 (Home Team)", value="Home Team")
-away_name_input = st.sidebar.text_input("어웨이팀 이름 (Away Team)", value="Away Team")
+home_name_input = st.sidebar.text_input("홈팀 이름", value=auto_home_name)
+away_name_input = st.sidebar.text_input("어웨이팀 이름", value=auto_away_name)
 
 st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
 pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=105.0, step=1.0)
@@ -166,14 +178,13 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
-# 이미지에 완벽히 부합하는 Sofascore 스타일 커스텀 히트맵 컬러맵
-# 투명 -> 민트/연두 -> 밝은 노랑 -> 주황 -> 딥 레드
+# Sofascore 스타일 커스텀 히트맵 컬러맵
 sofascore_colors = [
-    (0.65, 0.95, 0.70, 0.0),  # 낮은 영역 (투명)
-    (0.60, 0.95, 0.65, 0.55), # 라이트 그린/민트
-    (0.98, 0.95, 0.45, 0.75), # 밝은 레몬 옐로우
-    (0.95, 0.60, 0.25, 0.88), # 주황
-    (0.80, 0.20, 0.20, 0.95)  # 딥 레드
+    (0.65, 0.95, 0.70, 0.0),
+    (0.60, 0.95, 0.65, 0.55),
+    (0.98, 0.95, 0.45, 0.75),
+    (0.95, 0.60, 0.25, 0.88),
+    (0.80, 0.20, 0.20, 0.95)
 ]
 sofascore_cmap = LinearSegmentedColormap.from_list("sofascore_style", sofascore_colors)
 
@@ -273,10 +284,8 @@ else:
             if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
-            # 1. 흰색/클린 피치 배경 세팅
             ax.set_facecolor(pitch_bg)
 
-            # 2. 업로드한 이미지 스타일 맞춤 히트맵 (민트 -> 노랑 -> 주황 -> 딥 레드)
             if len(tdf) > 2:
                 sns.kdeplot(
                     x=px, y=py, 
@@ -291,7 +300,6 @@ else:
                     clip=((0, pitch_x_val), (0, pitch_y_val))
                 )
 
-            # 3. 은은하고 깔끔한 라이트 회색 피치 라인 덧그리기
             draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
 
             ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='#222222', pad=12, fontweight='bold')
