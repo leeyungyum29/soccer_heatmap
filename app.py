@@ -6,6 +6,7 @@ import matplotlib.font_manager as fm
 import seaborn as sns
 import platform
 import os
+import io
 import urllib.request
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -219,7 +220,7 @@ pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#FFFFFF")
 bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.45, step=0.05)
 
 # =========================================================
-# 4. 히트맵 시각화 (통합 / 전반 / 후반 / 공격 루트 시퀀스)
+# 4. 히트맵 시각화 및 고화질 다운로드 기능
 # =========================================================
 st.subheader(f"📊 경기 히트맵 분석 ({pitch_x_val}m x {pitch_y_val}m 규격)")
 
@@ -228,7 +229,7 @@ if len(dfs) == 0:
 else:
     tab_all, tab_first, tab_second, tab_route = st.tabs(["🔥 통합 히트맵", "⏱️ 전반전만 보기", "⏱️ 후반전만 보기", "🧭 공격 루트 시퀀스 (시작~종료)"])
 
-    def render_heatmap(period_filter=None, route_only=False):
+    def render_heatmap(period_filter=None, route_only=False, tab_key=""):
         num_teams = len(dfs)
         if num_teams == 0:
             return
@@ -307,14 +308,30 @@ else:
         fig.patch.set_facecolor(pitch_bg)
         st.pyplot(fig)
 
+        # 고화질 PNG 파일 다운로드 버튼 추가
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none')
+        buf.seek(0)
+        
+        filter_label = period_filter if period_filter else ("공격루트" if route_only else "통합")
+        download_file_name = f"축구_히트맵_{filter_label}.png"
+
+        st.download_button(
+            label=f"📥 {filter_label} 히트맵 고화질 이미지 다운로드 (300 DPI PNG)",
+            data=buf,
+            file_name=download_file_name,
+            mime="image/png",
+            key=f"btn_download_{tab_key}"
+        )
+
     with tab_all:
-        render_heatmap(period_filter=None, route_only=False)
+        render_heatmap(period_filter=None, route_only=False, tab_key="all")
 
     with tab_first:
-        render_heatmap(period_filter="전반", route_only=False)
+        render_heatmap(period_filter="전반", route_only=False, tab_key="first")
 
     with tab_second:
-        render_heatmap(period_filter="후반", route_only=False)
+        render_heatmap(period_filter="후반", route_only=False, tab_key="second")
 
     with tab_route:
-        render_heatmap(period_filter=None, route_only=True)
+        render_heatmap(period_filter=None, route_only=True, tab_key="route")
