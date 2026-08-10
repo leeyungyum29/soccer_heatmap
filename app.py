@@ -37,7 +37,7 @@ st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout
 # =========================================================
 # 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 공격 방향 화살표 그리기
 # =========================================================
-def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#102238', line_color='white', attack_dir="L->R"):
+def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#1E4D2B', line_color='white', attack_dir="L->R"):
     ax.set_facecolor(pitch_color)
     
     # 외곽선 및 중앙선
@@ -139,7 +139,7 @@ def extract_route_sequence(df):
 # =========================================================
 # 3. Streamlit UI 및 데이터 처리
 # =========================================================
-st.title("⚽ 국민대학교 공식 템플릿 축구 히트맵 분석기")
+st.title("⚽ 축구 히트맵 분석기")
 
 st.sidebar.header("📁 팀별 데이터 업로드")
 st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 파일들을 업로드해 주세요.")
@@ -168,13 +168,13 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
-# 국민대 전용 커스텀 컬러맵
-kmu_colors = [(0.3, 0.6, 0.9, 0.0), (0.2, 0.7, 1.0, 0.6), (0.1, 0.9, 0.9, 0.8), (0.95, 0.85, 0.2, 0.9), (0.95, 0.3, 0.1, 1.0)]
-kmu_cmap = LinearSegmentedColormap.from_list("kmu_heatmap", kmu_colors)
+# 초록 피치와 잘 어울리는 커스텀 컬러맵 (노랑-주황-빨강 핫스팟)
+kmu_colors = [(0.9, 0.9, 0.4, 0.0), (1.0, 0.8, 0.2, 0.6), (1.0, 0.5, 0.0, 0.8), (0.9, 0.1, 0.1, 0.95)]
+kmu_cmap = LinearSegmentedColormap.from_list("green_pitch_heatmap", kmu_colors)
 
 COLOR_PALETTES = {
-    "국민대 시그니처 (블루-핫스팟)": kmu_cmap,
-    "열지형 (초록-노랑-빨강)": "YlOrRd",
+    "열지형 (초록 피치 추천: 노랑-주황-빨강)": kmu_cmap,
+    "열지형 기본 (YlOrRd)": "YlOrRd",
     "레드 (강렬한 빨강)": "Reds",
     "블루 (시원한 파랑)": "Blues",
     "퍼플 (보라)": "Purples",
@@ -200,7 +200,7 @@ for i, t_name in enumerate(target_teams):
     )
     team_attack_dirs[t_name] = "L->R" if dir_choice == "왼쪽 ➔ 오른쪽" else "R->L"
 
-pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#102238")
+pitch_bg = st.sidebar.color_picker("경기장 잔디 색상", value="#1E4D2B")
 bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.50, step=0.05)
 
 # =========================================================
@@ -269,10 +269,10 @@ else:
             if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
-            # 1. 국민대 네이비 피치 배경
+            # 1. 다크 그린 피치 배경
             draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
 
-            # 2. 국민대 히트맵 렌더링
+            # 2. 히트맵 렌더링
             if len(tdf) > 2:
                 sns.kdeplot(
                     x=px, y=py, 
@@ -287,12 +287,12 @@ else:
                     clip=((0, pitch_x_val), (0, pitch_y_val))
                 )
 
-            # 3. 화이트 선명도 피치 라인 재묘화
+            # 3. 피치 라인 재묘화
             draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color='none', attack_dir=current_attack_dir)
 
             ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
-        fig.patch.set_facecolor('#0C1B2D')
+        fig.patch.set_facecolor('#111111')
         st.pyplot(fig)
 
     with tab_all:
