@@ -264,7 +264,6 @@ else:
         if num_teams == 1:
             axes_screen = [axes_screen]
 
-        # 경기 제목 대진 표시
         vs_title = f"{home_name_input} vs {away_name_input}"
 
         for i, (t_name, team_df) in enumerate(dfs.items()):
@@ -332,20 +331,17 @@ else:
 
             draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
 
-            # 요청 반영: 상단 대진표 + 팀 히트맵 2줄 타이틀 (굵게 및 크기 키움)
-            ax.set_title(f"{vs_title}
-[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
+            ax.set_title(f"{vs_title}\n[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
 
         fig_screen.patch.set_facecolor(pitch_bg)
         st.pyplot(fig_screen)
 
-        # 팀별 독립 다운로드 버튼 생성
+        # 팀별 개별 다운로드 섹션
         st.markdown("### 📥 팀별 히트맵 이미지 개별 다운로드")
         col_btns = st.columns(num_teams)
 
         for i, (t_name, team_df) in enumerate(dfs.items()):
             with col_btns[i]:
-                # 단일 팀 개별 Figure 생성
                 fig_single, ax_single = plt.subplots(1, 1, figsize=(8, 7))
                 tdf = team_df.copy()
                 
@@ -400,11 +396,9 @@ else:
                         )
 
                     draw_pitch_lines(ax_single, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='#C5C8CE', attack_dir=current_attack_dir)
-                    ax_single.set_title(f"{vs_title}
-[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
+                    ax_single.set_title(f"{vs_title}\n[{t_name}] 히트맵", fontsize=16, color='#222222', pad=14, fontweight='bold')
                     fig_single.patch.set_facecolor(pitch_bg)
 
-                    # 요청 반영: 파일명에 다운로드 받는 팀 이름만 단독 표시
                     suffix = f"_{period_filter}" if period_filter else ("_공격루트" if route_only else "")
                     download_file_name = f"{match_no_input}_{match_date_input}_{t_name}_히트맵{suffix}.png"
 
