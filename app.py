@@ -37,9 +37,7 @@ st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout
 # =========================================================
 # 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 공격 방향 화살표 그리기
 # =========================================================
-def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#1E4D2B', line_color='white', attack_dir="L->R"):
-    ax.set_facecolor(pitch_color)
-    
+def draw_pitch_lines(ax, pitch_x=105.0, pitch_y=68.0, line_color='white', attack_dir="L->R"):
     # 외곽선 및 중앙선
     ax.plot([0, 0, pitch_x, pitch_x, 0], [0, pitch_y, pitch_y, 0, 0], color=line_color, lw=2)
     ax.plot([pitch_x/2, pitch_x/2], [0, pitch_y], color=line_color, lw=2)
@@ -168,12 +166,12 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
-# 초록 피치와 잘 어울리는 커스텀 컬러맵 (노랑-주황-빨강 핫스팟)
-kmu_colors = [(0.9, 0.9, 0.4, 0.0), (1.0, 0.8, 0.2, 0.6), (1.0, 0.5, 0.0, 0.8), (0.9, 0.1, 0.1, 0.95)]
-kmu_cmap = LinearSegmentedColormap.from_list("green_pitch_heatmap", kmu_colors)
+# 초록 피치 전용 노랑-주황-빨강 커스텀 컬러맵
+green_heatmap_colors = [(0.9, 0.9, 0.4, 0.0), (1.0, 0.8, 0.2, 0.6), (1.0, 0.5, 0.0, 0.8), (0.9, 0.1, 0.1, 0.95)]
+green_cmap = LinearSegmentedColormap.from_list("green_pitch_heatmap", green_heatmap_colors)
 
 COLOR_PALETTES = {
-    "열지형 (초록 피치 추천: 노랑-주황-빨강)": kmu_cmap,
+    "열지형 (초록 피치 추천: 노랑-주황-빨강)": green_cmap,
     "열지형 기본 (YlOrRd)": "YlOrRd",
     "레드 (강렬한 빨강)": "Reds",
     "블루 (시원한 파랑)": "Blues",
@@ -269,10 +267,10 @@ else:
             if period_filter == "후반" and flip_second_half:
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
-            # 1. 다크 그린 피치 배경
-            draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color=pitch_bg, attack_dir=current_attack_dir)
+            # 핵심: 서브플롯(ax) 배경색과 전체 그림(fig) 배경색을 사용자가 지정한 초록 잔디색(pitch_bg)으로 일치시킴
+            ax.set_facecolor(pitch_bg)
 
-            # 2. 히트맵 렌더링
+            # 1. 히트맵 렌더링
             if len(tdf) > 2:
                 sns.kdeplot(
                     x=px, y=py, 
@@ -287,12 +285,12 @@ else:
                     clip=((0, pitch_x_val), (0, pitch_y_val))
                 )
 
-            # 3. 피치 라인 재묘화
-            draw_pitch(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, pitch_color='none', attack_dir=current_attack_dir)
+            # 2. 피치 라인 그리기
+            draw_pitch_lines(ax, pitch_x=pitch_x_val, pitch_y=pitch_y_val, line_color='white', attack_dir=current_attack_dir)
 
             ax.set_title(f"[{t_name}] 히트맵", fontsize=14, color='white', pad=12, fontweight='bold')
 
-        fig.patch.set_facecolor('#111111')
+        fig.patch.set_facecolor(pitch_bg)
         st.pyplot(fig)
 
     with tab_all:
