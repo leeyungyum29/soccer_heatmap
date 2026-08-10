@@ -36,28 +36,23 @@ plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
-# =========================================================
 # 파일명에서 경기 번호, 날짜, 팀명 자동 파싱 함수
-# =========================================================
 def parse_match_metadata(home_files, away_files):
     match_no = "01"
     match_date = "0810"
     home_team = "홈팀"
     away_team = "어웨이팀"
 
-    # 1. 경기 번호 및 날짜 추출 (업로드된 전체 파일 대상 탐색)
     all_files = (home_files or []) + (away_files or [])
     for f in all_files:
         filename = os.path.splitext(f.name)[0].strip()
         
-        # '01_0810' 형태 패턴 파싱
         m = re.search(r'(\d{2})_(\d{4})', filename)
         if m:
             match_no = m.group(1)
             match_date = m.group(2)
             break
         
-        # 공백 분할 패턴 파싱
         tokens = filename.split()
         for t in tokens:
             if len(t) == 2 and t.isdigit():
@@ -65,7 +60,6 @@ def parse_match_metadata(home_files, away_files):
             elif len(t) == 4 and t.isdigit():
                 match_date = t
 
-    # 2. 파일명 맨 마지막 단어에서 팀명 추출
     if home_files:
         words = os.path.splitext(home_files[0].name)[0].strip().split()
         if words:
@@ -184,7 +178,6 @@ st.sidebar.info("💡 팀당 1개의 전후반 통합 파일 또는 분리된 �
 home_files = st.sidebar.file_uploader("🏠 홈팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 away_files = st.sidebar.file_uploader("✈️ 어웨이팀 태깅 파일 (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
 
-# 메타데이터 (경기번호, 날짜, 팀명) 자동 분석
 auto_no, auto_date, auto_home, auto_away = parse_match_metadata(home_files, away_files)
 
 st.sidebar.subheader("🏷️ 경기 정보 및 팀명 설정")
@@ -193,11 +186,10 @@ match_date_input = st.sidebar.text_input("경기 날짜", value=auto_date)
 home_name_input = st.sidebar.text_input("홈팀 이름 (왼쪽 팀)", value=auto_home)
 away_name_input = st.sidebar.text_input("어웨이팀 이름 (오른쪽 팀)", value=auto_away)
 
-st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
+st.sidebar.subheader("📐 경기장 규격 및 원점 설정")
 pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=105.0, step=1.0)
 pitch_y_val = st.sidebar.number_input("경기장 세로 길이 (m)", value=68.0, step=1.0)
 
-flip_second_half = st.sidebar.checkbox("🔄 후반전 진영 180° 자동 반전 (필요 시 체크)", value=False)
 flip_y_axis = st.sidebar.checkbox("↕️ Y축 상하 반전 (좌표 원점 수정용)", value=False)
 auto_scale = st.sidebar.checkbox("태깅 좌표 자동 정규화 (Scaling)", value=False)
 
@@ -210,7 +202,6 @@ if df_home is not None:
 if df_away is not None:
     dfs[away_name_input] = df_away
 
-# Sofascore 스타일 커스텀 히트맵 컬러맵
 sofascore_colors = [
     (0.65, 0.95, 0.70, 0.0),
     (0.60, 0.95, 0.65, 0.55),
@@ -228,24 +219,27 @@ COLOR_PALETTES = {
     "퍼플 (보라)": "Purples"
 }
 
-st.sidebar.subheader("🎨 팀별 히트맵 색상 및 디자인")
+st.sidebar.subheader("🎨 팀별 옵션 (색상 / 방향 / 180° 반전)")
 team_colors = {}
 team_attack_dirs = {}
+team_flip_option = {}
 
 target_teams = list(dfs.keys()) if len(dfs) > 0 else [home_name_input, away_name_input]
 
 for i, t_name in enumerate(target_teams):
-    default_idx = 0
-    selected_p = st.sidebar.selectbox(f"[{t_name}] 색상 테마", options=list(COLOR_PALETTES.keys()), index=default_idx, key=f"color_{i}")
+    st.sidebar.markdown(f"**[{t_name}]**")
+    selected_p = st.sidebar.selectbox(f"색상 테마", options=list(COLOR_PALETTES.keys()), index=0, key=f"color_{i}")
     team_colors[t_name] = COLOR_PALETTES[selected_p]
     
     dir_choice = st.sidebar.radio(
-        f"[{t_name}] 전반전 공격 방향", 
+        f"전반전 공격 방향", 
         options=["왼쪽 ➔ 오른쪽", "오른쪽 ➔ 왼쪽"], 
         index=0 if i == 0 else 1,
         key=f"dir_{i}"
     )
     team_attack_dirs[t_name] = "L->R" if dir_choice == "왼쪽 ➔ 오른쪽" else "R->L"
+    
+    team_flip_option[t_name] = st.sidebar.checkbox(f"🔄 후반전 진영 180° 자동 반전 적용", value=False, key=f"flip_{i}")
 
 pitch_bg = st.sidebar.color_picker("경기장 배경 색상", value="#FFFFFF")
 bw_val = st.sidebar.slider("히트맵 퍼짐 정도 (부드러움)", min_value=0.2, max_value=1.0, value=0.45, step=0.05)
@@ -297,7 +291,8 @@ else:
                 ax.axis('off')
                 continue
 
-            if flip_second_half and col_period is not None:
+            # 팀별로 독립 설정된 180도 반전 옵션 적용
+            if team_flip_option.get(t_name, False) and col_period is not None:
                 second_half_mask = tdf[col_period].astype(str).str.contains('후반|2nd|Second', case=False, na=False)
                 tdf.loc[second_half_mask, col_x] = pitch_x_val - tdf.loc[second_half_mask, col_x]
                 tdf.loc[second_half_mask, col_y] = pitch_y_val - tdf.loc[second_half_mask, col_y]
@@ -313,7 +308,7 @@ else:
                 py = tdf[col_y]
 
             current_attack_dir = team_attack_dirs[t_name]
-            if period_filter == "후반" and flip_second_half:
+            if period_filter == "후반" and team_flip_option.get(t_name, False):
                 current_attack_dir = "R->L" if current_attack_dir == "L->R" else "L->R"
 
             ax.set_facecolor(pitch_bg)
@@ -339,7 +334,6 @@ else:
         fig.patch.set_facecolor(pitch_bg)
         st.pyplot(fig)
 
-        # 요청하신 명명 규칙 반영: 경기번호_오늘날짜_왼쪽팀명_오른쪽팀명_히트맵.png
         suffix = f"_{period_filter}" if period_filter else ("_공격루트" if route_only else "")
         download_file_name = f"{match_no_input}_{match_date_input}_{home_name_input}_{away_name_input}_히트맵{suffix}.png"
 
@@ -348,7 +342,7 @@ else:
         buf.seek(0)
 
         st.download_button(
-            label=f"📥 [{download_file_name}] 이미지 고화질 다운로드 (300 DPI)",
+            label=f"📥 [{download_file_name}] 고화질 이미지 다운로드 (300 DPI)",
             data=buf,
             file_name=download_file_name,
             mime="image/png",
