@@ -34,9 +34,9 @@ plt.rcParams['axes.unicode_minus'] = False
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
 # =========================================================
-# 2. 맞춤 축구장 피치(95m x 57m 기본값) 및 공격 방향 화살표 그리기
+# 2. 맞춤 축구장 피치(105m x 68m 기본값) 및 공격 방향 화살표 그리기
 # =========================================================
-def draw_pitch(ax, pitch_x=95.0, pitch_y=57.0, pitch_color='#7ec850', line_color='white', attack_dir="L->R"):
+def draw_pitch(ax, pitch_x=105.0, pitch_y=68.0, pitch_color='#7ec850', line_color='white', attack_dir="L->R"):
     ax.set_facecolor(pitch_color)
     
     # 외곽선 및 중앙선
@@ -112,7 +112,7 @@ def load_multiple_files(files):
 # '공격 루트 시작' ~ '공격 루트 종료' 구간 시퀀스 추출
 def extract_route_sequence(df):
     col_opts = df.columns.tolist()
-    col_event = next((c for c in ['이벤트', 'event', 'Event'] if c in col_opts), None)
+    col_event = next((c for c in ['이벤트명', '이벤트', 'event', 'Event'] if c in col_opts), None)
     
     if col_event is None:
         return df
@@ -152,8 +152,8 @@ home_name_input = st.sidebar.text_input("홈팀 이름 (Home Team)", value="Home
 away_name_input = st.sidebar.text_input("어웨이팀 이름 (Away Team)", value="Away Team")
 
 st.sidebar.subheader("📐 경기장 규격 및 진영 설정")
-pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=95.0, step=1.0)
-pitch_y_val = st.sidebar.number_input("경기장 세로 길이 (m)", value=57.0, step=1.0)
+pitch_x_val = st.sidebar.number_input("경기장 가로 길이 (m)", value=105.0, step=1.0)
+pitch_y_val = st.sidebar.number_input("경기장 세로 길이 (m)", value=68.0, step=1.0)
 
 # 추출 엑셀 자체에 회전이 적용되어 있으므로 기본값 False 처리
 flip_second_half = st.sidebar.checkbox("🔄 후반전 진영 180° 자동 반전 (필요 시 체크)", value=False)
@@ -226,13 +226,12 @@ else:
                 tdf = extract_route_sequence(tdf)
 
             col_opts = tdf.columns.tolist()
-            col_x = next((c for c in ['X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
-            col_y = next((c for c in ['Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
-            col_period = next((c for c in ['경기시점', 'period', 'Period'] if c in col_opts), None)
+            # 시작X, 시작Y, 이벤트명 자동 인식 추가
+            col_x = next((c for c in ['시작X', 'X좌표', 'x', 'X'] if c in col_opts), col_opts[0])
+            col_y = next((c for c in ['시작Y', 'Y좌표', 'y', 'Y'] if c in col_opts), col_opts[min(1, len(col_opts)-1)])
+            col_period = next((c for c in ['경기시점', 'period', 'Period', '시점'] if c in col_opts), None)
 
-            # ---------------------------------------------------------
             # TypeError 방지: X, Y 좌표를 강제로 숫자(float) 타입으로 변환
-            # ---------------------------------------------------------
             tdf[col_x] = pd.to_numeric(tdf[col_x], errors='coerce')
             tdf[col_y] = pd.to_numeric(tdf[col_y], errors='coerce')
 
