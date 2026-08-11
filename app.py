@@ -36,7 +36,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="축구 팀별 맞춤 히트맵 분석기", layout="wide")
 
-# 파일명에서 경기 번호, 날짜, 팀명 자동 파싱 함수
+# 파일명에서 경기 번호, 날짜, 팀명 자동 파싱 함수 (언더바 _ 및 공백 분할 대응)
 def parse_match_metadata(home_files, away_files):
     match_no = "01"
     match_date = "0810"
@@ -47,28 +47,31 @@ def parse_match_metadata(home_files, away_files):
     for f in all_files:
         filename = os.path.splitext(f.name)[0].strip()
         
-        m = re.search(r'(\d{2})_(\d{4})', filename)
-        if m:
-            match_no = m.group(1)
-            match_date = m.group(2)
+        # '0811_01' 또는 '01_0810' 파싱
+        m1 = re.search(r'(\d{4})_(\d{2})', filename)
+        if m1:
+            match_date = m1.group(1)
+            match_no = m1.group(2)
             break
-        
-        tokens = filename.split()
-        for t in tokens:
-            if len(t) == 2 and t.isdigit():
-                match_no = t
-            elif len(t) == 4 and t.isdigit():
-                match_date = t
+            
+        m2 = re.search(r'(\d{2})_(\d{4})', filename)
+        if m2:
+            match_no = m2.group(1)
+            match_date = m2.group(2)
+            break
 
+    # 팀명 추출 (언더바 _ 나 띄어쓰기로 분할 후 맨 마지막 단어)
     if home_files:
-        words = os.path.splitext(home_files[0].name)[0].strip().split()
-        if words:
-            home_team = words[-1]
+        filename = os.path.splitext(home_files[0].name)[0].strip()
+        tokens = re.split(r'[_ ]+', filename)
+        if tokens:
+            home_team = tokens[-1]
 
     if away_files:
-        words = os.path.splitext(away_files[0].name)[0].strip().split()
-        if words:
-            away_team = words[-1]
+        filename = os.path.splitext(away_files[0].name)[0].strip()
+        tokens = re.split(r'[_ ]+', filename)
+        if tokens:
+            away_team = tokens[-1]
 
     return match_no, match_date, home_team, away_team
 
@@ -259,7 +262,6 @@ else:
         if num_teams == 0:
             return
 
-        # 화면용 통합 보기 그리기
         fig_screen, axes_screen = plt.subplots(1, num_teams, figsize=(8 * num_teams, 7))
         if num_teams == 1:
             axes_screen = [axes_screen]
@@ -336,7 +338,6 @@ else:
         fig_screen.patch.set_facecolor(pitch_bg)
         st.pyplot(fig_screen)
 
-        # 팀별 개별 다운로드 섹션
         st.markdown("### 📥 팀별 히트맵 이미지 개별 다운로드")
         col_btns = st.columns(num_teams)
 
